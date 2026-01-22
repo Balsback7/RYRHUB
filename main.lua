@@ -4,7 +4,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Load modules
-local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Balsback7/RYRHUB/refs/heads/main/gui.lua"))()
+local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/RYRHub/main/gui.lua"))()
 local Commands = {}
 
 -- Load command modules
@@ -13,7 +13,8 @@ local commandFiles = {
     "bring", 
     "annoy",
     "leash",
-    "jail"
+    "jail",
+    "protect"  -- New command
 }
 
 for _, cmdName in ipairs(commandFiles) do
@@ -47,9 +48,11 @@ local Shared = {
     -- State
     farming = false,
     annoying = false,
+    protecting = false,
     followConnection = nil,
     attackConnection = nil,
     annoyConnection = nil,
+    protectConnection = nil,
     
     -- Settings
     HEIGHT = 3,
@@ -68,6 +71,7 @@ local Shared = {
     chooseRandomNPC = nil,
     stopFarm = nil,
     stopAnnoy = nil,
+    stopProtect = nil,
     
     -- Commands
     Commands = Commands
@@ -104,8 +108,13 @@ Shared.cleanupAllConnections = function()
         Shared.annoyConnection:Disconnect() 
         Shared.annoyConnection = nil 
     end
+    if Shared.protectConnection then
+        Shared.protectConnection:Disconnect()
+        Shared.protectConnection = nil
+    end
     Shared.farming = false
     Shared.annoying = false
+    Shared.protecting = false
 end
 
 Shared.useAllAttackRemotes = function()
