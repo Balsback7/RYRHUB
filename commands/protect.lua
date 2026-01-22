@@ -8,6 +8,27 @@ local damageConnection = nil
 local originalPosition = nil
 local lastDamageTime = 0
 local currentAttacker = nil
+local cleanupConnection = nil
+
+-- Clean up all connections
+local function cleanupProtectConnections()
+    if protectConnection then
+        protectConnection:Disconnect()
+        protectConnection = nil
+    end
+    
+    if damageConnection then
+        damageConnection:Disconnect()
+        damageConnection = nil
+    end
+    
+    if cleanupConnection then
+        cleanupConnection:Disconnect()
+        cleanupConnection = nil
+    end
+    
+    currentAttacker = nil
+end
 
 -- Function to wield behind target with distance
 local function wieldBehindTarget(target, distanceOffset)
@@ -27,6 +48,12 @@ local function wieldBehindTarget(target, distanceOffset)
         
         -- Don't wield if we're currently attacking someone
         if currentAttacker then return end
+        
+        -- Check if target is still the same
+        if protectTarget ~= target then
+            if connection then connection:Disconnect() end
+            return
+        end
         
         if tHRP and tHRP.Parent then
             -- Stay behind target with specified distance
@@ -54,6 +81,12 @@ local function wieldBehindAttacker(attacker)
     
     local connection = Protect.Shared.RunService.Heartbeat:Connect(function()
         if not currentAttacker or not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then
+            if connection then connection:Disconnect() end
+            return
+        end
+        
+        -- Check if we're still attacking the same person
+        if currentAttacker ~= attacker then
             if connection then connection:Disconnect() end
             return
         end
@@ -132,7 +165,7 @@ local function attackAttacker(attacker)
     -- Clear current attacker
     currentAttacker = nil
     
-    -- Return to protecting
+    -- Return to protecting (only if we're still protecting the same target)
     if Protect.Shared.protecting and protectTarget and protectTarget.Character then
         Protect.Shared.updateStatus("Returning to protect "..protectTarget.Name, Color3.fromRGB(59, 189, 246))
         
@@ -151,7 +184,8 @@ local function trackDamageDealers()
     local healthCheckConnection = nil
     
     healthCheckConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
-        if not Protect.Shared.protecting or not protectTarget then
+        -- Check if we're still protecting the same target
+        if not Protect.Shared.protecting or protectTarget ~= protectTarget then
             if healthCheckConnection then
                 healthCheckConnection:Disconnect()
             end
@@ -217,16 +251,22 @@ function Protect.init(Shared)
 end
 
 function Protect.start(targetText)
-    if Protect.Shared.protecting then return end
+    -- If already protecting, stop first
+    if Protect.Shared.protecting then
+        Protect.stop()
+        task.wait(0.5) -- Small delay to ensure cleanup
+    end
     
-    protectTarget = Protect.Shared.findPlayerSmart(targetText)
-    if not protectTarget then
+    local newTarget = Protect.Shared.findPlayerSmart(targetText)
+    if not newTarget then
         Protect.Shared.updateStatus("Player not found", Color3.fromRGB(246, 59, 59))
         return
     end
     
     Protect.Shared.protecting = true
+    protectTarget = newTarget
     currentAttacker = nil
+    lastDamageTime = 0
     originalPosition = Protect.Shared.savePosition()
     
     Protect.Shared.updateStatus("Protecting "..protectTarget.Name.. "...", Color3.fromRGB(59, 189, 246))
@@ -237,10 +277,13 @@ function Protect.start(targetText)
     -- Start tracking damage
     damageConnection = trackDamageDealers()
     
-    -- Simple heartbeat connection
-    Protect.Shared.protectConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
+    -- Simple cleanup connection
+    cleanupConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
         if not Protect.Shared.protecting then
-            Protect.Shared.protectConnection:Disconnect()
+            if cleanupConnection then
+                cleanupConnection:Disconnect()
+                cleanupConnection = nil
+            end
             return
         end
     end)
@@ -248,24 +291,12 @@ end
 
 function Protect.stop()
     Protect.Shared.protecting = false
-    currentAttacker = nil
+    
+    -- Clean up all connections
+    cleanupProtectConnections()
+    
+    -- Clear target
     protectTarget = nil
-    
-    -- Disconnect all connections
-    if protectConnection then
-        protectConnection:Disconnect()
-        protectConnection = nil
-    end
-    
-    if damageConnection then
-        damageConnection:Disconnect()
-        damageConnection = nil
-    end
-    
-    if Protect.Shared.protectConnection then
-        Protect.Shared.protectConnection:Disconnect()
-        Protect.Shared.protectConnection = nil
-    end
     
     -- Return to original position
     if originalPosition then
@@ -280,7 +311,7 @@ end
 function Protect.onCharacterAdded()
     -- Reset protect state when character respawns
     Protect.Shared.protecting = false
-    currentAttacker = nil
+    cleanupProtectConnections()
     protectTarget = nil
     originalPosition = nil
     lastDamageTime = 0
