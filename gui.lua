@@ -1,4 +1,4 @@
---// RYR Hub GUI
+--// RYR Hub GUI with Tabs
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
@@ -7,7 +7,12 @@ local GUI = {}
 -- State
 local player = Players.LocalPlayer
 local gui, mainFrame, inputBox
-local farmBtn, bringBtn, annoyBtn, leashBtn, jailBtn, resetBtn, clickToggle
+local tabButtons = {}
+local tabContents = {}
+local currentTab = "attack" -- Default tab
+
+-- Buttons
+local farmBtn, bringBtn, annoyBtn, leashBtn, jailBtn, protectBtn, resetBtn, clickToggle
 local statusLabel, statusIcon
 local Shared = nil
 
@@ -86,6 +91,25 @@ local function toggleClickSelection()
     setupClickSelection()
 end
 
+-- Switch tabs
+local function switchTab(tabName)
+    currentTab = tabName
+    
+    -- Update tab button colors
+    for name, btn in pairs(tabButtons) do
+        if name == tabName then
+            btn.BackgroundColor3 = Color3.fromRGB(59, 130, 246) -- Active tab
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45) -- Inactive tab
+        end
+    end
+    
+    -- Show/hide tab contents
+    for name, content in pairs(tabContents) do
+        content.Visible = (name == tabName)
+    end
+end
+
 -- Create GUI
 function GUI.create()
     -- Clean up old GUI if exists
@@ -102,7 +126,7 @@ function GUI.create()
 
     mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.fromOffset(350, 450)
+    mainFrame.Size = UDim2.fromOffset(380, 500) -- Slightly wider for tabs
     mainFrame.Position = UDim2.fromScale(0.5, 0.5)
     mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -151,14 +175,57 @@ function GUI.create()
         gui:Destroy() 
     end)
 
-    -- Content
-    local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -30, 1, -50)
-    content.Position = UDim2.fromOffset(15, 50)
-    content.BackgroundTransparency = 1
-    content.Parent = mainFrame
+    -- Tabs
+    local tabsFrame = Instance.new("Frame")
+    tabsFrame.Size = UDim2.new(1, -20, 0, 40)
+    tabsFrame.Position = UDim2.fromOffset(10, 50)
+    tabsFrame.BackgroundTransparency = 1
+    tabsFrame.Parent = mainFrame
 
-    -- Input + Buttons
+    local tabNames = {"attack", "fun", "farm", "settings"}
+    local tabDisplayNames = {"⚔️ ATTACK", "🎉 FUN", "🌾 FARM", "⚙️ SETTINGS"}
+    
+    for i, tabName in ipairs(tabNames) do
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Size = UDim2.new(0.24, 0, 1, 0)
+        tabBtn.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
+        tabBtn.BackgroundColor3 = (tabName == currentTab) and Color3.fromRGB(59, 130, 246) or Color3.fromRGB(40, 40, 45)
+        tabBtn.Text = tabDisplayNames[i]
+        tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabBtn.Font = Enum.Font.GothamSemibold
+        tabBtn.TextSize = 11
+        tabBtn.Parent = tabsFrame
+        local tabCorner = Instance.new("UICorner")
+        tabCorner.CornerRadius = UDim.new(0, 6)
+        tabCorner.Parent = tabBtn
+        
+        tabBtn.MouseButton1Click:Connect(function()
+            switchTab(tabName)
+        end)
+        
+        tabButtons[tabName] = tabBtn
+    end
+
+    -- Tab contents container
+    local tabsContentContainer = Instance.new("Frame")
+    tabsContentContainer.Size = UDim2.new(1, -20, 1, -100)
+    tabsContentContainer.Position = UDim2.fromOffset(10, 100)
+    tabsContentContainer.BackgroundTransparency = 1
+    tabsContentContainer.Parent = mainFrame
+
+    -- Create tab contents
+    tabContents = {}
+    
+    -- ATTACK TAB
+    local attackTab = Instance.new("Frame")
+    attackTab.Name = "AttackTab"
+    attackTab.Size = UDim2.new(1, 0, 1, 0)
+    attackTab.BackgroundTransparency = 1
+    attackTab.Visible = (currentTab == "attack")
+    attackTab.Parent = tabsContentContainer
+    tabContents["attack"] = attackTab
+    
+    -- Input box for attack tab
     inputBox = Instance.new("TextBox")
     inputBox.Size = UDim2.new(1, -20, 0, 35)
     inputBox.Position = UDim2.fromOffset(0, 0)
@@ -168,75 +235,73 @@ function GUI.create()
     inputBox.Font = Enum.Font.Gotham
     inputBox.TextSize = 14
     inputBox.ClearTextOnFocus = false
-    inputBox.Parent = content
+    inputBox.Parent = attackTab
 
     local cornerInput = Instance.new("UICorner")
     cornerInput.CornerRadius = UDim.new(0, 6)
     cornerInput.Parent = inputBox
 
-    -- Blue Recharge Button
-    farmBtn = Instance.new("TextButton")
-    farmBtn.Size = UDim2.new(1, 0, 0, 35)
-    farmBtn.Position = UDim2.fromOffset(0, 45)
-    farmBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-    farmBtn.Text = "START BLUE RECHARGE"
-    farmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    farmBtn.Font = Enum.Font.GothamSemibold
-    farmBtn.TextSize = 14
-    farmBtn.Parent = content
-    local farmCorner = Instance.new("UICorner")
-    farmCorner.CornerRadius = UDim.new(0, 6)
-    farmCorner.Parent = farmBtn
+    -- Annoy Player Button
+    annoyBtn = Instance.new("TextButton")
+    annoyBtn.Size = UDim2.new(1, 0, 0, 35)
+    annoyBtn.Position = UDim2.fromOffset(0, 45)
+    annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
+    annoyBtn.Text = "START ANNOY PLAYER"
+    annoyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    annoyBtn.Font = Enum.Font.GothamSemibold
+    annoyBtn.TextSize = 14
+    annoyBtn.Parent = attackTab
+    local annoyCorner = Instance.new("UICorner")
+    annoyCorner.CornerRadius = UDim.new(0, 6)
+    annoyCorner.Parent = annoyBtn
 
-    -- Bring, Annoy, and Leash Buttons Row 1
-    local buttonRow1 = Instance.new("Frame")
-    buttonRow1.Size = UDim2.new(1, 0, 0, 35)
-    buttonRow1.Position = UDim2.fromOffset(0, 90)
-    buttonRow1.BackgroundTransparency = 1
-    buttonRow1.Parent = content
+    -- Protect Player Button
+    protectBtn = Instance.new("TextButton")
+    protectBtn.Size = UDim2.new(1, 0, 0, 35)
+    protectBtn.Position = UDim2.fromOffset(0, 90)
+    protectBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+    protectBtn.Text = "🛡️ PROTECT PLAYER"
+    protectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    protectBtn.Font = Enum.Font.GothamSemibold
+    protectBtn.TextSize = 14
+    protectBtn.Parent = attackTab
+    local protectCorner = Instance.new("UICorner")
+    protectCorner.CornerRadius = UDim.new(0, 6)
+    protectCorner.Parent = protectBtn
 
+    -- FUN TAB
+    local funTab = Instance.new("Frame")
+    funTab.Name = "FunTab"
+    funTab.Size = UDim2.new(1, 0, 1, 0)
+    funTab.BackgroundTransparency = 1
+    funTab.Visible = (currentTab == "fun")
+    funTab.Parent = tabsContentContainer
+    tabContents["fun"] = funTab
+    
+    -- Bring Player Button
     bringBtn = Instance.new("TextButton")
-    bringBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    bringBtn.Size = UDim2.new(1, 0, 0, 35)
     bringBtn.Position = UDim2.fromOffset(0, 0)
     bringBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
     bringBtn.Text = "BRING PLAYER"
     bringBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     bringBtn.Font = Enum.Font.GothamSemibold
     bringBtn.TextSize = 14
-    bringBtn.Parent = buttonRow1
+    bringBtn.Parent = funTab
     local bringCorner = Instance.new("UICorner")
     bringCorner.CornerRadius = UDim.new(0, 6)
     bringCorner.Parent = bringBtn
 
-    annoyBtn = Instance.new("TextButton")
-    annoyBtn.Size = UDim2.new(0.48, 0, 1, 0)
-    annoyBtn.Position = UDim2.new(0.52, 0, 0, 0)
-    annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
-    annoyBtn.Text = "START ANNOY PLAYER"
-    annoyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    annoyBtn.Font = Enum.Font.GothamSemibold
-    annoyBtn.TextSize = 14
-    annoyBtn.Parent = buttonRow1
-    local annoyCorner = Instance.new("UICorner")
-    annoyCorner.CornerRadius = UDim.new(0, 6)
-    annoyCorner.Parent = annoyBtn
-
-    -- Leash Button Row
-    local buttonRow2 = Instance.new("Frame")
-    buttonRow2.Size = UDim2.new(1, 0, 0, 35)
-    buttonRow2.Position = UDim2.fromOffset(0, 135)
-    buttonRow2.BackgroundTransparency = 1
-    buttonRow2.Parent = content
-
+    -- Leash Player Button
     leashBtn = Instance.new("TextButton")
-    leashBtn.Size = UDim2.new(1, 0, 1, 0)
-    leashBtn.Position = UDim2.fromOffset(0, 0)
+    leashBtn.Size = UDim2.new(1, 0, 0, 35)
+    leashBtn.Position = UDim2.fromOffset(0, 45)
     leashBtn.BackgroundColor3 = Color3.fromRGB(168, 85, 247)
     leashBtn.Text = "LEASH PLAYER"
     leashBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     leashBtn.Font = Enum.Font.GothamSemibold
     leashBtn.TextSize = 14
-    leashBtn.Parent = buttonRow2
+    leashBtn.Parent = funTab
     local leashCorner = Instance.new("UICorner")
     leashCorner.CornerRadius = UDim.new(0, 6)
     leashCorner.Parent = leashBtn
@@ -244,23 +309,55 @@ function GUI.create()
     -- Jail Player Button
     jailBtn = Instance.new("TextButton")
     jailBtn.Size = UDim2.new(1, 0, 0, 35)
-    jailBtn.Position = UDim2.fromOffset(0, 180)
+    jailBtn.Position = UDim2.fromOffset(0, 90)
     jailBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
     jailBtn.Text = "🚔 JAIL PLAYER"
     jailBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     jailBtn.Font = Enum.Font.GothamSemibold
     jailBtn.TextSize = 14
-    jailBtn.Parent = content
+    jailBtn.Parent = funTab
     local jailCorner = Instance.new("UICorner")
     jailCorner.CornerRadius = UDim.new(0, 6)
     jailCorner.Parent = jailBtn
 
-    -- Click Selection Toggle Row
+    -- FARM TAB
+    local farmTab = Instance.new("Frame")
+    farmTab.Name = "FarmTab"
+    farmTab.Size = UDim2.new(1, 0, 1, 0)
+    farmTab.BackgroundTransparency = 1
+    farmTab.Visible = (currentTab == "farm")
+    farmTab.Parent = tabsContentContainer
+    tabContents["farm"] = farmTab
+    
+    -- Blue Recharge Button
+    farmBtn = Instance.new("TextButton")
+    farmBtn.Size = UDim2.new(1, 0, 0, 35)
+    farmBtn.Position = UDim2.fromOffset(0, 0)
+    farmBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
+    farmBtn.Text = Shared and Shared.farming and "STOP FARM" or "START BLUE RECHARGE"
+    farmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    farmBtn.Font = Enum.Font.GothamSemibold
+    farmBtn.TextSize = 14
+    farmBtn.Parent = farmTab
+    local farmCorner = Instance.new("UICorner")
+    farmCorner.CornerRadius = UDim.new(0, 6)
+    farmCorner.Parent = farmBtn
+
+    -- SETTINGS TAB
+    local settingsTab = Instance.new("Frame")
+    settingsTab.Name = "SettingsTab"
+    settingsTab.Size = UDim2.new(1, 0, 1, 0)
+    settingsTab.BackgroundTransparency = 1
+    settingsTab.Visible = (currentTab == "settings")
+    settingsTab.Parent = tabsContentContainer
+    tabContents["settings"] = settingsTab
+    
+    -- Click Selection Toggle
     local clickRow = Instance.new("Frame")
     clickRow.Size = UDim2.new(1, 0, 0, 35)
-    clickRow.Position = UDim2.fromOffset(0, 225)
+    clickRow.Position = UDim2.fromOffset(0, 0)
     clickRow.BackgroundTransparency = 1
-    clickRow.Parent = content
+    clickRow.Parent = settingsTab
 
     local clickLabel = Instance.new("TextLabel")
     clickLabel.Size = UDim2.new(0.6, 0, 1, 0)
@@ -289,27 +386,27 @@ function GUI.create()
     -- Reset Button
     resetBtn = Instance.new("TextButton")
     resetBtn.Size = UDim2.new(1, 0, 0, 35)
-    resetBtn.Position = UDim2.fromOffset(0, 270)
+    resetBtn.Position = UDim2.fromOffset(0, 45)
     resetBtn.BackgroundColor3 = Color3.fromRGB(168, 85, 247)
     resetBtn.Text = "🔄 RESET SCRIPT"
     resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     resetBtn.Font = Enum.Font.GothamSemibold
     resetBtn.TextSize = 14
-    resetBtn.Parent = content
+    resetBtn.Parent = settingsTab
     local resetCorner = Instance.new("UICorner")
     resetCorner.CornerRadius = UDim.new(0, 6)
     resetCorner.Parent = resetBtn
 
-    -- Status
+    -- Status (at bottom of main frame)
     statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, 0, 0, 25)
-    statusLabel.Position = UDim2.fromOffset(0, 315)
+    statusLabel.Size = UDim2.new(1, -20, 0, 25)
+    statusLabel.Position = UDim2.fromOffset(10, 465)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "Idle"
     statusLabel.TextColor3 = Color3.fromRGB(59, 246, 105)
     statusLabel.Font = Enum.Font.GothamSemibold
     statusLabel.TextSize = 14
-    statusLabel.Parent = content
+    statusLabel.Parent = mainFrame
 
     statusIcon = Instance.new("Frame")
     statusIcon.Size = UDim2.fromOffset(12, 12)
@@ -325,8 +422,12 @@ function GUI.create()
         if Shared and Shared.Commands and Shared.Commands.farm then
             if Shared.farming then
                 Shared.Commands.farm.stop()
+                farmBtn.Text = "START BLUE RECHARGE"
+                farmBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
             else
                 Shared.Commands.farm.start()
+                farmBtn.Text = "STOP FARM"
+                farmBtn.BackgroundColor3 = Color3.fromRGB(246, 59, 59)
             end
         end
     end)
@@ -345,8 +446,12 @@ function GUI.create()
         if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.annoy then
             if Shared.annoying then
                 Shared.Commands.annoy.stop()
+                annoyBtn.Text = "START ANNOY PLAYER"
+                annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
             else
                 Shared.Commands.annoy.start(inputBox.Text)
+                annoyBtn.Text = "STOP ANNOY"
+                annoyBtn.BackgroundColor3 = Color3.fromRGB(246, 59, 59)
             end
         else
             updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
@@ -375,6 +480,24 @@ function GUI.create()
         end
     end)
 
+    protectBtn.MouseButton1Click:Connect(function()
+        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.protect then
+            if Shared.protecting then
+                Shared.Commands.protect.stop()
+                protectBtn.Text = "🛡️ PROTECT PLAYER"
+                protectBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+            else
+                Shared.Commands.protect.start(inputBox.Text)
+                protectBtn.Text = "STOP PROTECT"
+                protectBtn.BackgroundColor3 = Color3.fromRGB(246, 59, 59)
+            end
+        else
+            updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
+            task.wait(1.5)
+            updateStatus("Idle", Color3.fromRGB(59, 246, 105))
+        end
+    end)
+
     clickToggle.MouseButton1Click:Connect(toggleClickSelection)
 
     resetBtn.MouseButton1Click:Connect(function()
@@ -383,6 +506,7 @@ function GUI.create()
             Shared.cleanupAllConnections()
             Shared.farming = false
             Shared.annoying = false
+            Shared.protecting = false
             
             -- Reset button states
             farmBtn.Text = "START BLUE RECHARGE"
@@ -390,6 +514,9 @@ function GUI.create()
             
             annoyBtn.Text = "START ANNOY PLAYER"
             annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
+            
+            protectBtn.Text = "🛡️ PROTECT PLAYER"
+            protectBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
         end
         
         updateStatus("Script reset! Ready", Color3.fromRGB(59, 246, 105))
@@ -430,8 +557,14 @@ function GUI.init(sharedData)
                 annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
             end
             
+            if protectBtn then
+                protectBtn.Text = "🛡️ PROTECT PLAYER"
+                protectBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+            end
+            
             Shared.farming = false
             Shared.annoying = false
+            Shared.protecting = false
             
             -- Wait for respawn
             task.wait(3)
