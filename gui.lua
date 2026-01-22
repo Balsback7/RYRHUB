@@ -6,7 +6,7 @@ local GUI = {}
 
 -- State
 local player = Players.LocalPlayer
-local gui, mainFrame, inputBox
+local gui, mainFrame, inputBox, funInputBox
 local tabButtons = {}
 local tabContents = {}
 local currentTab = "attack" -- Default tab
@@ -50,17 +50,23 @@ local function setupClickSelection()
                 if model then
                     for _, plr in ipairs(Players:GetPlayers()) do
                         if plr.Character == model and plr ~= player then
-                            -- Put player name in textbox
-                            if inputBox then
+                            -- Put player name in textbox based on current tab
+                            if currentTab == "attack" and inputBox then
                                 inputBox.Text = plr.Name
-                                updateStatus("Selected: "..plr.Name, Color3.fromRGB(59, 189, 246))
-                                
-                                -- Flash the input box to show selection
-                                local originalColor = inputBox.BackgroundColor3
+                            elseif currentTab == "fun" and funInputBox then
+                                funInputBox.Text = plr.Name
+                            end
+                            
+                            updateStatus("Selected: "..plr.Name, Color3.fromRGB(59, 189, 246))
+                            
+                            -- Flash the input box to show selection
+                            local targetBox = (currentTab == "attack") and inputBox or funInputBox
+                            if targetBox then
+                                local originalColor = targetBox.BackgroundColor3
                                 for i = 1, 3 do
-                                    inputBox.BackgroundColor3 = Color3.fromRGB(59, 189, 246)
+                                    targetBox.BackgroundColor3 = Color3.fromRGB(59, 189, 246)
                                     task.wait(0.1)
-                                    inputBox.BackgroundColor3 = originalColor
+                                    targetBox.BackgroundColor3 = originalColor
                                     task.wait(0.1)
                                 end
                             end
@@ -108,6 +114,16 @@ local function switchTab(tabName)
     for name, content in pairs(tabContents) do
         content.Visible = (name == tabName)
     end
+end
+
+-- Get current input box based on active tab
+local function getCurrentInputBox()
+    if currentTab == "attack" then
+        return inputBox
+    elseif currentTab == "fun" then
+        return funInputBox
+    end
+    return nil
 end
 
 -- Create GUI
@@ -278,10 +294,26 @@ function GUI.create()
     funTab.Parent = tabsContentContainer
     tabContents["fun"] = funTab
     
+    -- Input box for fun tab
+    funInputBox = Instance.new("TextBox")
+    funInputBox.Size = UDim2.new(1, -20, 0, 35)
+    funInputBox.Position = UDim2.fromOffset(0, 0)
+    funInputBox.PlaceholderText = "Enter player name..."
+    funInputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    funInputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    funInputBox.Font = Enum.Font.Gotham
+    funInputBox.TextSize = 14
+    funInputBox.ClearTextOnFocus = false
+    funInputBox.Parent = funTab
+
+    local funCornerInput = Instance.new("UICorner")
+    funCornerInput.CornerRadius = UDim.new(0, 6)
+    funCornerInput.Parent = funInputBox
+    
     -- Bring Player Button
     bringBtn = Instance.new("TextButton")
     bringBtn.Size = UDim2.new(1, 0, 0, 35)
-    bringBtn.Position = UDim2.fromOffset(0, 0)
+    bringBtn.Position = UDim2.fromOffset(0, 45)
     bringBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
     bringBtn.Text = "BRING PLAYER"
     bringBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -295,7 +327,7 @@ function GUI.create()
     -- Leash Player Button
     leashBtn = Instance.new("TextButton")
     leashBtn.Size = UDim2.new(1, 0, 0, 35)
-    leashBtn.Position = UDim2.fromOffset(0, 45)
+    leashBtn.Position = UDim2.fromOffset(0, 90)
     leashBtn.BackgroundColor3 = Color3.fromRGB(168, 85, 247)
     leashBtn.Text = "LEASH PLAYER"
     leashBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -309,7 +341,7 @@ function GUI.create()
     -- Jail Player Button
     jailBtn = Instance.new("TextButton")
     jailBtn.Size = UDim2.new(1, 0, 0, 35)
-    jailBtn.Position = UDim2.fromOffset(0, 90)
+    jailBtn.Position = UDim2.fromOffset(0, 135)
     jailBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
     jailBtn.Text = "🚔 JAIL PLAYER"
     jailBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -433,8 +465,9 @@ function GUI.create()
     end)
 
     bringBtn.MouseButton1Click:Connect(function()
-        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.bring then
-            Shared.Commands.bring.execute(inputBox.Text)
+        local currentInput = getCurrentInputBox()
+        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.bring then
+            Shared.Commands.bring.execute(currentInput.Text)
         else
             updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
             task.wait(1.5)
@@ -443,13 +476,14 @@ function GUI.create()
     end)
 
     annoyBtn.MouseButton1Click:Connect(function()
-        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.annoy then
+        local currentInput = getCurrentInputBox()
+        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.annoy then
             if Shared.annoying then
                 Shared.Commands.annoy.stop()
                 annoyBtn.Text = "START ANNOY PLAYER"
                 annoyBtn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
             else
-                Shared.Commands.annoy.start(inputBox.Text)
+                Shared.Commands.annoy.start(currentInput.Text)
                 annoyBtn.Text = "STOP ANNOY"
                 annoyBtn.BackgroundColor3 = Color3.fromRGB(246, 59, 59)
             end
@@ -461,8 +495,9 @@ function GUI.create()
     end)
 
     leashBtn.MouseButton1Click:Connect(function()
-        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.leash then
-            Shared.Commands.leash.execute(inputBox.Text)
+        local currentInput = getCurrentInputBox()
+        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.leash then
+            Shared.Commands.leash.execute(currentInput.Text)
         else
             updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
             task.wait(1.5)
@@ -471,8 +506,9 @@ function GUI.create()
     end)
 
     jailBtn.MouseButton1Click:Connect(function()
-        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.jail then
-            Shared.Commands.jail.execute(inputBox.Text)
+        local currentInput = getCurrentInputBox()
+        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.jail then
+            Shared.Commands.jail.execute(currentInput.Text)
         else
             updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
             task.wait(1.5)
@@ -481,13 +517,14 @@ function GUI.create()
     end)
 
     protectBtn.MouseButton1Click:Connect(function()
-        if inputBox.Text ~= "" and Shared and Shared.Commands and Shared.Commands.protect then
+        local currentInput = getCurrentInputBox()
+        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.protect then
             if Shared.protecting then
                 Shared.Commands.protect.stop()
                 protectBtn.Text = "🛡️ PROTECT PLAYER"
                 protectBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
             else
-                Shared.Commands.protect.start(inputBox.Text)
+                Shared.Commands.protect.start(currentInput.Text)
                 protectBtn.Text = "STOP PROTECT"
                 protectBtn.BackgroundColor3 = Color3.fromRGB(246, 59, 59)
             end
