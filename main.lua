@@ -4,7 +4,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Load modules
-local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/RYRHub/main/gui.lua"))()
+local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Balsback7/RYRHUB/refs/heads/main/gui.lua"))()
 local Commands = {}
 
 -- Load command modules
