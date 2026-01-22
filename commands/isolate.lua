@@ -99,7 +99,7 @@ local function useChargeWithIsolationTeleport(target)
     -- Save position before everything
     local positionBeforeCharge = Isolate.Shared.savePosition()
     
-    -- 1. Fire charge command FIRST
+    -- Step 1: Fire charge command FIRST
     pcall(function()
         Isolate.Shared.ReplicatedStorage:WaitForChild("JALADADEPELOEVENT"):FireServer()
         chargeUsed = true
@@ -111,7 +111,7 @@ local function useChargeWithIsolationTeleport(target)
         return false
     end
     
-    -- 2. IMMEDIATELY teleport to isolation location (-488, -251, 418)
+    -- Step 2: IMMEDIATELY teleport to isolation location (-488, -251, 418)
     Isolate.Shared.updateStatus("Teleporting to isolation: -488, -251, 418", Color3.fromRGB(246, 189, 59))
     
     local ISOLATE_POSITION = CFrame.new(-488, -251, 418)
@@ -121,18 +121,22 @@ local function useChargeWithIsolationTeleport(target)
     Isolate.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
     Isolate.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
     
-    -- 3. Wait for charge animation to complete (2-3 seconds)
+    -- Step 3: Wait for charge animation to complete (2-3 seconds)
     Isolate.Shared.updateStatus("Waiting for charge animation at isolation...", Color3.fromRGB(246, 189, 59))
     task.wait(3) -- Wait for charge animation
     
-    -- 4. Teleport back to original position
+    -- Step 4: Wait 5 seconds at isolation position (as per step-by-step)
+    Isolate.Shared.updateStatus("Waiting 5 seconds at isolation position...", Color3.fromRGB(246, 189, 59))
+    task.wait(5) -- Wait 5 seconds as per instructions
+    
+    -- Step 5: Teleport back to original position
     Isolate.Shared.updateStatus("Returning from isolation...", Color3.fromRGB(246, 189, 59))
     Isolate.Shared.smoothTP(positionBeforeCharge)
     
-    -- 5. Wait a moment after returning
+    -- Step 6: Wait a moment after returning
     task.wait(0.5)
     
-    -- 6. Check if target ragdolled during charge
+    -- Step 7: Check if target ragdolled during charge
     local tChar = target.Character
     if tChar and tChar:FindFirstChild("RagdollTrigger", true) then
         Isolate.Shared.updateStatus(target.Name.. " ragdolled by charge!", Color3.fromRGB(59, 246, 105))
@@ -185,8 +189,8 @@ function Isolate.execute(targetText)
         
         Isolate.Shared.updateStatus("Isolating "..target.Name.. "...", Color3.fromRGB(168, 85, 247))
         
-        -- PHASE 1: Teleport to target
-        Isolate.Shared.updateStatus("Phase 1: Teleporting to target...", Color3.fromRGB(246, 189, 59))
+        -- PHASE 1: Teleport behind target (Step 1)
+        Isolate.Shared.updateStatus("Step 1: Teleporting behind target...", Color3.fromRGB(246, 189, 59))
         
         local tChar = target.Character
         if not tChar then
@@ -208,36 +212,44 @@ function Isolate.execute(targetText)
         
         task.wait(0.3)
         
-        -- PHASE 2: Attempt charge command WITH IMMEDIATE ISOLATION TELEPORT
-        Isolate.Shared.updateStatus("Phase 2: Attempting charge with isolation...", Color3.fromRGB(246, 189, 59))
+        -- PHASE 2: Wield behind target (Step 2)
+        Isolate.Shared.updateStatus("Step 2: Wielding behind target...", Color3.fromRGB(246, 189, 59))
+        local wieldConn = wieldBehindTarget(target)
+        
+        if not wieldConn then
+            Isolate.Shared.updateStatus("Failed to wield behind target", Color3.fromRGB(246, 59, 59))
+            Isolate.Shared.smoothTP(originalPosition)
+            return
+        end
+        
+        -- Wait a moment for wielding to stabilize
+        task.wait(0.5)
+        
+        -- PHASE 3: Attempt charge command (Step 3)
+        Isolate.Shared.updateStatus("Step 3: Attempting charge with isolation...", Color3.fromRGB(246, 189, 59))
         
         local chargeSuccess = false
         
-        -- Wield behind target for charge
-        local wieldConn = wieldBehindTarget(target)
+        -- Use charge command WITH isolation teleport (this handles steps 3-6)
+        chargeSuccess = useChargeWithIsolationTeleport(target)
         
+        -- Stop wielding
         if wieldConn then
-            -- Use charge command WITH isolation teleport
-            chargeSuccess = useChargeWithIsolationTeleport(target)
-            
-            -- Stop wielding
             wieldConn:Disconnect()
-            
-            -- If charge was used but didn't ragdoll, check if it ragdolled later
-            if not chargeSuccess then
-                Isolate.Shared.updateStatus("Checking if charge will ragdoll...", Color3.fromRGB(246, 189, 59))
-                chargeSuccess = waitForRagdoll(target, 2) -- Wait 2 more seconds
-            end
-        else
-            Isolate.Shared.updateStatus("Failed to wield behind target", Color3.fromRGB(246, 59, 59))
         end
         
-        -- PHASE 3: If charge failed or didn't ragdoll, use attack remotes
+        -- If charge was used but didn't ragdoll, check if it ragdolled later
         if not chargeSuccess then
-            Isolate.Shared.updateStatus("Charge failed/didn't ragdoll, using attack remotes...", Color3.fromRGB(246, 189, 59))
+            Isolate.Shared.updateStatus("Checking if charge will ragdoll...", Color3.fromRGB(246, 189, 59))
+            chargeSuccess = waitForRagdoll(target, 2) -- Wait 2 more seconds
+        end
+        
+        -- PHASE 4: If charge failed or didn't ragdoll, use attack remotes (Step 4)
+        if not chargeSuccess then
+            Isolate.Shared.updateStatus("Step 4: Charge failed/didn't ragdoll, using attack remotes...", Color3.fromRGB(246, 189, 59))
             
-            -- Teleport back behind target if not already there
-            if Isolate.Shared.hrp and Isolate.Shared.hrp.Parent then
+            -- Reposition behind target if needed
+            if Isolate.Shared.hrp and Isolate.Shared.hrp.Parent and tHRP and tHRP.Parent then
                 local currentPos = Isolate.Shared.hrp.Position
                 local targetPos = tHRP.Position
                 local distance = (currentPos - targetPos).Magnitude
@@ -262,8 +274,8 @@ function Isolate.execute(targetText)
             Isolate.Shared.updateStatus("Failed to isolate "..target.Name, Color3.fromRGB(246, 59, 59))
         end
         
-        -- Final return to original position
-        Isolate.Shared.updateStatus("Returning to original position...", Color3.fromRGB(246, 189, 59))
+        -- PHASE 5: Return to original position (Step 6)
+        Isolate.Shared.updateStatus("Step 6: Returning to original position...", Color3.fromRGB(246, 189, 59))
         Isolate.Shared.smoothTP(originalPosition)
         
         task.wait(1)
