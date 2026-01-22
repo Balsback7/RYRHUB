@@ -18,7 +18,7 @@ local commandFiles = {
 
 for _, cmdName in ipairs(commandFiles) do
     local success, cmd = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/RYRHub/main/commands/" .. cmdName .. ".lua"))()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Balsback7/RYRHub/main/commands/" .. cmdName .. ".lua"))()
     end)
     
     if success and cmd then
