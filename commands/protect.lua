@@ -7,11 +7,12 @@ local protectConnection = nil
 local damageConnection = nil
 local originalPosition = nil
 local lastDamageTime = 0
-local lastAttacker = nil
-local isAttackingAttacker = false
+local currentAttacker = nil
+local recentlyAttackedPlayers = {} -- Track players we've recently attacked
+local ATTACK_COOLDOWN = 10 -- Seconds before attacking same player again
 
--- Function to wield behind target
-local function wieldBehindTarget(target)
+-- Function to wield behind target with distance
+local function wieldBehindTarget(target, distanceOffset)
     if not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then return nil end
     
     local tChar = target.Character
@@ -26,10 +27,13 @@ local function wieldBehindTarget(target)
             return
         end
         
+        -- Don't wield if we're currently attacking someone
+        if currentAttacker then return end
+        
         if tHRP and tHRP.Parent then
-            -- Stay behind target (height 3, back offset -3)
+            -- Stay behind target with specified distance
             Protect.Shared.hrp.CFrame = CFrame.new(
-                tHRP.Position + Vector3.new(0, Protect.Shared.HEIGHT, 0) + tHRP.CFrame.LookVector * Protect.Shared.BACK_OFFSET, 
+                tHRP.Position + Vector3.new(0, Protect.Shared.HEIGHT, 0) + tHRP.CFrame.LookVector * distanceOffset, 
                 tHRP.Position
             )
             Protect.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
@@ -40,7 +44,7 @@ local function wieldBehindTarget(target)
     return connection
 end
 
--- Function to wield behind attacker (EXACTLY like bring command)
+-- Function to wield behind attacker (close distance)
 local function wieldBehindAttacker(attacker)
     if not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then return nil end
     
@@ -51,13 +55,13 @@ local function wieldBehindAttacker(attacker)
     if not aHRP then return nil end
     
     local connection = Protect.Shared.RunService.Heartbeat:Connect(function()
-        if not isAttackingAttacker or not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then
+        if not currentAttacker or not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then
             if connection then connection:Disconnect() end
             return
         end
         
         if aHRP and aHRP.Parent then
-            -- Stay behind attacker (height 3, back offset -3) - EXACTLY like bring command
+            -- Stay close behind attacker (regular bring distance)
             Protect.Shared.hrp.CFrame = CFrame.new(
                 aHRP.Position + Vector3.new(0, Protect.Shared.HEIGHT, 0) + aHRP.CFrame.LookVector * Protect.Shared.BACK_OFFSET, 
                 aHRP.Position
@@ -70,9 +74,51 @@ local function wieldBehindAttacker(attacker)
     return connection
 end
 
--- Function to attack attacker until ragdoll
-local function attackUntilRagdoll(attacker)
+-- Check if we should attack this player (cooldown check)
+local function shouldAttackPlayer(player)
+    if not player then return false end
+    
+    -- Check if we've recently attacked this player
+    if recentlyAttackedPlayers[player] then
+        local timeSinceLastAttack = tick() - recentlyAttackedPlayers[player]
+        if timeSinceLastAttack < ATTACK_COOLDOWN then
+            return false -- Still in cooldown
+        end
+    end
+    
+    return true
+end
+
+-- Mark player as recently attacked
+local function markPlayerAttacked(player)
+    recentlyAttackedPlayers[player] = tick()
+end
+
+-- Clean up old cooldowns
+local function cleanupCooldowns()
+    local currentTime = tick()
+    local playersToRemove = {}
+    
+    for player, attackTime in pairs(recentlyAttackedPlayers) do
+        if currentTime - attackTime > ATTACK_COOLDOWN then
+            table.insert(playersToRemove, player)
+        end
+    end
+    
+    for _, player in ipairs(playersToRemove) do
+        recentlyAttackedPlayers[player] = nil
+    end
+end
+
+-- Function to attack attacker (ONE HIT ONLY)
+local function attackAttacker(attacker)
     if not attacker or not attacker.Character then return end
+    
+    -- Check cooldown
+    if not shouldAttackPlayer(attacker) then
+        Protect.Shared.updateStatus("Recently attacked "..attacker.Name.. ", skipping", Color3.fromRGB(246, 189, 59))
+        return
+    end
     
     Protect.Shared.updateStatus("Attacking "..attacker.Name.. "...", Color3.fromRGB(220, 38, 38))
     
@@ -84,59 +130,33 @@ local function attackUntilRagdoll(attacker)
         return 
     end
     
+    -- Set current attacker
+    currentAttacker = attacker
+    
     -- Stop protecting temporarily
-    isAttackingAttacker = true
     if protectConnection then
         protectConnection:Disconnect()
         protectConnection = nil
     end
     
-    -- Wield behind attacker (EXACTLY like bring command)
+    -- Wield behind attacker (close distance)
     local wieldConn = wieldBehindAttacker(attacker)
     
     if not wieldConn then
         Protect.Shared.updateStatus("Failed to wield behind "..attacker.Name, Color3.fromRGB(246, 59, 59))
-        isAttackingAttacker = false
+        currentAttacker = nil
         return
     end
     
-    -- Attack until ragdoll
-    local attempts = 0
-    local maxAttempts = 30
+    -- ONE HIT ONLY - Use all attack remotes once
+    Protect.Shared.updateStatus("Hitting "..attacker.Name.. " once...", Color3.fromRGB(246, 189, 59))
+    Protect.Shared.useAllAttackRemotes()
     
-    Protect.Shared.updateStatus("Wielding behind "..attacker.Name.. " and attacking...", Color3.fromRGB(246, 189, 59))
+    -- Mark as recently attacked
+    markPlayerAttacked(attacker)
     
-    while isAttackingAttacker and attempts < maxAttempts do
-        -- Check if attacker is ragdolled
-        if aChar:FindFirstChild("RagdollTrigger", true) then
-            Protect.Shared.updateStatus(attacker.Name.. " ragdolled!", Color3.fromRGB(59, 246, 105))
-            break
-        end
-        
-        -- Check if attacker is dead
-        local humanoid = aChar:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health <= 0 then
-            Protect.Shared.updateStatus(attacker.Name.. " is down!", Color3.fromRGB(59, 246, 105))
-            break
-        end
-        
-        -- Check if attacker still has character
-        if not attacker.Character or attacker.Character ~= aChar then
-            Protect.Shared.updateStatus(attacker.Name.. " character changed", Color3.fromRGB(246, 189, 59))
-            break
-        end
-        
-        -- Attack with all remotes
-        Protect.Shared.useAllAttackRemotes()
-        
-        attempts += 1
-        
-        if attempts % 5 == 0 then
-            Protect.Shared.updateStatus("Attacking... ("..attempts.."/"..maxAttempts..")", Color3.fromRGB(246, 189, 59))
-        end
-        
-        task.wait(0.2)
-    end
+    -- Wait a moment for the hit
+    task.wait(0.5)
     
     -- Stop wielding behind attacker
     if wieldConn then
@@ -144,15 +164,18 @@ local function attackUntilRagdoll(attacker)
         wieldConn = nil
     end
     
-    -- Resume protecting
-    isAttackingAttacker = false
+    -- Clear current attacker
+    currentAttacker = nil
     
-    -- Return to wielding behind protected player
+    -- Clean up old cooldowns
+    cleanupCooldowns()
+    
+    -- Return to protecting
     if Protect.Shared.protecting and protectTarget and protectTarget.Character then
         Protect.Shared.updateStatus("Returning to protect "..protectTarget.Name, Color3.fromRGB(59, 189, 246))
         
-        -- Resume wielding behind protected player
-        protectConnection = wieldBehindTarget(protectTarget)
+        -- Resume wielding behind protected player (10 studs away)
+        protectConnection = wieldBehindTarget(protectTarget, -10) -- 10 studs back
     else
         Protect.Shared.updateStatus("Protection ended", Color3.fromRGB(246, 59, 59))
     end
@@ -175,7 +198,6 @@ local function trackDamageDealers()
         
         local tChar = protectTarget.Character
         if not tChar then 
-            Protect.Shared.updateStatus(protectTarget.Name.. " has no character", Color3.fromRGB(246, 189, 59))
             return 
         end
         
@@ -186,12 +208,12 @@ local function trackDamageDealers()
         if humanoid.Health < lastHealth then
             local damageTaken = lastHealth - humanoid.Health
             
-            if damageTaken > 0 and tick() - lastDamageTime > 2 then -- Cooldown to prevent spam
+            if damageTaken > 0 and tick() - lastDamageTime > 1 then -- 1 second cooldown
                 lastDamageTime = tick()
-                Protect.Shared.updateStatus(protectTarget.Name.. " took "..damageTaken.. " damage!", Color3.fromRGB(246, 189, 59))
+                Protect.Shared.updateStatus(protectTarget.Name.. " took "..math.floor(damageTaken).. " damage!", Color3.fromRGB(246, 189, 59))
                 
-                -- Find the closest player who might have caused damage
-                local closestAttacker = nil
+                -- Find who caused the damage (closest player within damage range)
+                local potentialAttacker = nil
                 local closestDistance = 9999
                 
                 for _, player in pairs(Protect.Shared.Players:GetPlayers()) do
@@ -203,8 +225,9 @@ local function trackDamageDealers()
                             
                             if pHRP and tHRP then
                                 local distance = (pHRP.Position - tHRP.Position).Magnitude
-                                if distance < 30 and distance < closestDistance then -- Within 30 studs
-                                    closestAttacker = player
+                                -- Attack range is typically 10-15 studs in most games
+                                if distance < 15 and distance < closestDistance then
+                                    potentialAttacker = player
                                     closestDistance = distance
                                 end
                             end
@@ -212,10 +235,11 @@ local function trackDamageDealers()
                     end
                 end
                 
-                if closestAttacker then
-                    Protect.Shared.updateStatus(closestAttacker.Name.. " likely caused damage!", Color3.fromRGB(220, 38, 38))
-                    lastAttacker = closestAttacker
-                    attackUntilRagdoll(closestAttacker)
+                if potentialAttacker then
+                    Protect.Shared.updateStatus(potentialAttacker.Name.. " attacked "..protectTarget.Name, Color3.fromRGB(220, 38, 38))
+                    attackAttacker(potentialAttacker)
+                else
+                    Protect.Shared.updateStatus("Unknown attacker", Color3.fromRGB(246, 189, 59))
                 end
             end
         end
@@ -240,79 +264,34 @@ function Protect.start(targetText)
     end
     
     Protect.Shared.protecting = true
-    isAttackingAttacker = false
+    currentAttacker = nil
     originalPosition = Protect.Shared.savePosition()
     
     Protect.Shared.updateStatus("Protecting "..protectTarget.Name.. "...", Color3.fromRGB(59, 189, 246))
     
-    -- Start wielding behind protected player
-    protectConnection = wieldBehindTarget(protectTarget)
+    -- Start wielding behind protected player (10 studs away)
+    protectConnection = wieldBehindTarget(protectTarget, -10) -- Negative means behind, 10 studs
     
     -- Start tracking damage
     damageConnection = trackDamageDealers()
     
-    -- Also periodically check for threats
-    Protect.Shared.protectConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
-        if not Protect.Shared.protecting or not protectTarget then
-            if Protect.Shared.protectConnection then
-                Protect.Shared.protectConnection:Disconnect()
-            end
+    -- Periodically clean up cooldowns
+    local cleanupConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
+        if not Protect.Shared.protecting then
+            cleanupConnection:Disconnect()
             return
         end
         
-        -- Don't check for threats while actively attacking someone
-        if isAttackingAttacker then return end
-        
-        local tChar = protectTarget.Character
-        if not tChar then
-            Protect.Shared.updateStatus(protectTarget.Name.. " has no character", Color3.fromRGB(246, 189, 59))
-            Protect.stop()
-            return
-        end
-        
-        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-        if not tHRP then
-            Protect.Shared.updateStatus(protectTarget.Name.. " has no HRP", Color3.fromRGB(246, 189, 59))
-            Protect.stop()
-            return
-        end
-        
-        -- Check for players holding weapons or attacking animations
-        for _, player in pairs(Protect.Shared.Players:GetPlayers()) do
-            if player ~= Protect.Shared.player and player ~= protectTarget and not isAttackingAttacker then
-                local pChar = player.Character
-                if pChar then
-                    local pHRP = pChar:FindFirstChild("HumanoidRootPart")
-                    if pHRP then
-                        local distance = (pHRP.Position - tHRP.Position).Magnitude
-                        
-                        -- Check if player is holding a weapon or tool
-                        local hasWeapon = false
-                        for _, tool in pairs(pChar:GetChildren()) do
-                            if tool:IsA("Tool") then
-                                hasWeapon = true
-                                break
-                            end
-                        end
-                        
-                        -- Attack if armed and close, or if they were the last attacker
-                        if (hasWeapon and distance < 20) or (player == lastAttacker and distance < 30) then
-                            Protect.Shared.updateStatus(player.Name.. " is a threat!", Color3.fromRGB(246, 189, 59))
-                            attackUntilRagdoll(player)
-                            break
-                        end
-                    end
-                end
-            end
-        end
+        cleanupCooldowns()
     end)
+    
+    Protect.Shared.protectConnection = cleanupConnection
 end
 
 function Protect.stop()
     Protect.Shared.protecting = false
-    isAttackingAttacker = false
+    currentAttacker = nil
     protectTarget = nil
-    lastAttacker = nil
     
     -- Disconnect all connections
     if protectConnection then
@@ -330,6 +309,9 @@ function Protect.stop()
         Protect.Shared.protectConnection = nil
     end
     
+    -- Clear cooldowns
+    recentlyAttackedPlayers = {}
+    
     -- Return to original position
     if originalPosition then
         Protect.Shared.updateStatus("Returning to position...", Color3.fromRGB(246, 189, 59))
@@ -343,11 +325,11 @@ end
 function Protect.onCharacterAdded()
     -- Reset protect state when character respawns
     Protect.Shared.protecting = false
-    isAttackingAttacker = false
+    currentAttacker = nil
     protectTarget = nil
-    lastAttacker = nil
     originalPosition = nil
     lastDamageTime = 0
+    recentlyAttackedPlayers = {}
 end
 
 return Protect
