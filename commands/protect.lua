@@ -2,41 +2,33 @@
 local Protect = {}
 
 -- Local variables
-local protectTargets = {}  -- Changed from single target to table
-local protectConnections = {}  -- Multiple connections for multiple targets
-local damageConnections = {}  -- Multiple damage trackers
+local protectTarget = nil
+local protectConnection = nil
+local damageConnection = nil
 local originalPosition = nil
 local lastDamageTime = 0
 local currentAttacker = nil
 local isAttacking = false
-local cleanupConnections = {}  -- Multiple cleanup connections
 
--- Function to parse multiple player names
-local function parsePlayerNames(inputText)
-    local players = {}
-    local names = string.split(inputText, ",")
-    
-    for _, name in ipairs(names) do
-        name = string.trim(name)
-        if name ~= "" then
-            local player = Protect.Shared.findPlayerSmart(name)
-            if player then
-                table.insert(players, player)
-            end
-        end
+-- Clean up all connections
+local function cleanupProtectConnections()
+    if protectConnection then
+        protectConnection:Disconnect()
+        protectConnection = nil
     end
     
-    return players
+    if damageConnection then
+        damageConnection:Disconnect()
+        damageConnection = nil
+    end
+    
+    currentAttacker = nil
+    isAttacking = false
 end
 
--- Function to wield behind multiple targets (rotates between them)
-local function wieldBehindTargets(targets, distanceOffset)
+-- Function to wield behind target with distance (FIXED)
+local function wieldBehindTarget(target, distanceOffset)
     if not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then return nil end
-    if #targets == 0 then return nil end
-    
-    local currentTargetIndex = 1
-    local lastSwitchTime = tick()
-    local switchInterval = 3 -- Switch target every 3 seconds
     
     local connection = Protect.Shared.RunService.Heartbeat:Connect(function()
         if not Protect.Shared.protecting or not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then
@@ -47,30 +39,23 @@ local function wieldBehindTargets(targets, distanceOffset)
         -- Don't wield if we're currently attacking someone
         if isAttacking then return end
         
-        -- Switch target every few seconds if protecting multiple players
-        if #targets > 1 and tick() - lastSwitchTime > switchInterval then
-            currentTargetIndex = (currentTargetIndex % #targets) + 1
-            lastSwitchTime = tick()
-        end
-        
-        local target = targets[currentTargetIndex]
-        if not target then return end
-        
         local tChar = target.Character
         if not tChar then return end
         
         local tHRP = tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        if tHRP and tHRP.Parent then
-            -- Stay behind target with specified distance (50 studs)
-            Protect.Shared.hrp.CFrame = CFrame.new(
-                tHRP.Position + Vector3.new(0, Protect.Shared.HEIGHT, 0) + tHRP.CFrame.LookVector * distanceOffset, 
-                tHRP.Position
-            )
-            Protect.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
-            Protect.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
-        end
+        -- Stay behind target with specified distance (FIXED CALCULATION)
+        local targetPosition = tHRP.Position
+        local targetLookVector = tHRP.CFrame.LookVector
+        
+        -- Calculate position behind target
+        local offsetPosition = targetPosition + (targetLookVector * distanceOffset) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
+        
+        -- Smooth teleport to position
+        Protect.Shared.hrp.CFrame = CFrame.new(offsetPosition, targetPosition)
+        Protect.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
+        Protect.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
     end)
     
     return connection
@@ -80,52 +65,46 @@ end
 local function wieldBehindAttacker(attacker)
     if not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then return nil end
     
-    local aChar = attacker.Character
-    if not aChar then return nil end
-    
-    local aHRP = aChar:FindFirstChild("HumanoidRootPart")
-    if not aHRP then return nil end
-    
-    local lastValidPosition = aHRP.Position
-    local stuckCheckTime = tick()
-    
     local connection = Protect.Shared.RunService.Heartbeat:Connect(function()
         if not isAttacking or not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then
             if connection then connection:Disconnect() end
             return
         end
         
-        -- Check if we're still attacking the same person
-        if currentAttacker ~= attacker then
+        local aChar = attacker.Character
+        if not aChar then 
             if connection then connection:Disconnect() end
             return
         end
         
-        local currentChar = attacker.Character
-        if not currentChar or currentChar ~= aChar then
-            if connection then connection:Disconnect() end
-            return
-        end
+        local aHRP = aChar:FindFirstChild("HumanoidRootPart")
+        if not aHRP then return end
         
-        local currentHRP = currentChar:FindFirstChild("HumanoidRootPart")
-        if not currentHRP then 
-            if connection then connection:Disconnect() end
-            return
-        end
+        -- Stay close behind attacker (regular bring distance) - FIXED CALCULATION
+        local attackerPosition = aHRP.Position
+        local attackerLookVector = aHRP.CFrame.LookVector
         
-        -- Update last valid position
-        lastValidPosition = currentHRP.Position
+        -- Calculate position behind attacker
+        local offsetPosition = attackerPosition + (attackerLookVector * Protect.Shared.BACK_OFFSET) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
         
-        -- Stay close behind attacker (regular bring distance)
-        Protect.Shared.hrp.CFrame = CFrame.new(
-            currentHRP.Position + Vector3.new(0, Protect.Shared.HEIGHT, 0) + currentHRP.CFrame.LookVector * Protect.Shared.BACK_OFFSET, 
-            currentHRP.Position
-        )
+        -- Smooth teleport to position
+        Protect.Shared.hrp.CFrame = CFrame.new(offsetPosition, attackerPosition)
         Protect.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
         Protect.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
     end)
     
     return connection
+end
+
+-- Function to teleport to position (FIXED - no wielding, just teleport)
+local function teleportToPosition(position, lookAt)
+    if not Protect.Shared.hrp or not Protect.Shared.hrp.Parent then return false end
+    
+    Protect.Shared.hrp.CFrame = CFrame.new(position, lookAt or position)
+    Protect.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
+    Protect.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    return true
 end
 
 -- Function to attack attacker (3 ATTACKS) - FIXED
@@ -142,32 +121,45 @@ local function attackAttacker(attacker)
         return 
     end
     
-    -- Set current attacker and attacking state
-    currentAttacker = attacker
+    -- Set attacking state
     isAttacking = true
+    currentAttacker = attacker
     
     -- Stop protecting temporarily
-    for _, conn in pairs(protectConnections) do
-        if conn then
-            conn:Disconnect()
-        end
+    if protectConnection then
+        protectConnection:Disconnect()
+        protectConnection = nil
     end
-    protectConnections = {}
     
-    -- Wield behind attacker (close distance) - FIXED
-    local wieldConn = wieldBehindAttacker(attacker)
+    -- Get attacker's position for teleporting
+    local attackerPosition = aHRP.Position
+    local attackerLookVector = aHRP.CFrame.LookVector
     
-    if not wieldConn then
-        Protect.Shared.updateStatus("Failed to wield behind "..attacker.Name, Color3.fromRGB(246, 59, 59))
-        currentAttacker = nil
+    -- Calculate position behind attacker
+    local behindAttackerPosition = attackerPosition + (attackerLookVector * Protect.Shared.BACK_OFFSET) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
+    
+    -- Teleport behind attacker (FIXED - no wielding, direct teleport)
+    if not teleportToPosition(behindAttackerPosition, attackerPosition) then
+        Protect.Shared.updateStatus("Failed to teleport behind "..attacker.Name, Color3.fromRGB(246, 59, 59))
         isAttacking = false
+        currentAttacker = nil
         return
     end
     
-    -- ATTACK 3 TIMES
+    task.wait(0.2) -- Small delay to ensure teleport
+    
+    -- ATTACK 3 TIMES while staying behind attacker
     Protect.Shared.updateStatus("Attacking "..attacker.Name.. " (3 hits)...", Color3.fromRGB(246, 189, 59))
     
     for attackCount = 1, 3 do
+        -- Update position to stay behind attacker
+        if aHRP and aHRP.Parent then
+            attackerPosition = aHRP.Position
+            attackerLookVector = aHRP.CFrame.LookVector
+            behindAttackerPosition = attackerPosition + (attackerLookVector * Protect.Shared.BACK_OFFSET) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
+            teleportToPosition(behindAttackerPosition, attackerPosition)
+        end
+        
         -- Use all attack remotes
         Protect.Shared.useAllAttackRemotes()
         
@@ -183,44 +175,53 @@ local function attackAttacker(attacker)
     -- Wait a moment after final attack
     task.wait(0.5)
     
-    -- Stop wielding behind attacker
-    if wieldConn then
-        wieldConn:Disconnect()
-        wieldConn = nil
-    end
-    
-    -- Clear current attacker
-    currentAttacker = nil
+    -- Clear attacking state
     isAttacking = false
+    currentAttacker = nil
     
     -- Return to protecting
-    if Protect.Shared.protecting and #protectTargets > 0 then
-        Protect.Shared.updateStatus("Returning to protect players...", Color3.fromRGB(59, 189, 246))
+    if Protect.Shared.protecting and protectTarget and protectTarget.Character then
+        Protect.Shared.updateStatus("Returning to protect "..protectTarget.Name, Color3.fromRGB(59, 189, 246))
         
-        -- Resume wielding behind protected players (50 studs away)
-        protectConnections[1] = wieldBehindTargets(protectTargets, -50) -- 50 studs back
+        -- Get protected target position
+        local tChar = protectTarget.Character
+        if tChar then
+            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+            if tHRP then
+                local targetPosition = tHRP.Position
+                local targetLookVector = tHRP.CFrame.LookVector
+                
+                -- Calculate position 50 studs behind target
+                local behindTargetPosition = targetPosition + (targetLookVector * -50) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
+                
+                -- Teleport to position (no wielding, direct teleport)
+                teleportToPosition(behindTargetPosition, targetPosition)
+            end
+        end
+        
+        -- Resume wielding behind protected player (50 studs away)
+        protectConnection = wieldBehindTarget(protectTarget, -50) -- 50 studs back
     else
         Protect.Shared.updateStatus("Protection ended", Color3.fromRGB(246, 59, 59))
     end
 end
 
--- Track damage to all protected players
-local function trackDamageDealersForTarget(target)
-    if not target then return nil end
+-- Track damage to protected player
+local function trackDamageDealers()
+    if not protectTarget then return end
     
     local lastHealth = 100
     local healthCheckConnection = nil
     
     healthCheckConnection = Protect.Shared.RunService.Heartbeat:Connect(function()
-        -- Check if we're still protecting this target
-        if not Protect.Shared.protecting or not table.find(protectTargets, target) then
+        if not Protect.Shared.protecting or not protectTarget then
             if healthCheckConnection then
                 healthCheckConnection:Disconnect()
             end
             return
         end
         
-        local tChar = target.Character
+        local tChar = protectTarget.Character
         if not tChar then 
             return 
         end
@@ -234,14 +235,14 @@ local function trackDamageDealersForTarget(target)
             
             if damageTaken > 0 and tick() - lastDamageTime > 1 then -- 1 second cooldown between attack triggers
                 lastDamageTime = tick()
-                Protect.Shared.updateStatus(target.Name.. " took "..math.floor(damageTaken).. " damage!", Color3.fromRGB(246, 189, 59))
+                Protect.Shared.updateStatus(protectTarget.Name.. " took "..math.floor(damageTaken).. " damage!", Color3.fromRGB(246, 189, 59))
                 
                 -- Find who caused the damage (closest player within damage range)
                 local potentialAttacker = nil
                 local closestDistance = 9999
                 
                 for _, player in pairs(Protect.Shared.Players:GetPlayers()) do
-                    if player ~= Protect.Shared.player and not table.find(protectTargets, player) then
+                    if player ~= Protect.Shared.player and player ~= protectTarget then
                         local pChar = player.Character
                         if pChar then
                             local pHRP = pChar:FindFirstChild("HumanoidRootPart")
@@ -250,7 +251,7 @@ local function trackDamageDealersForTarget(target)
                             if pHRP and tHRP then
                                 local distance = (pHRP.Position - tHRP.Position).Magnitude
                                 -- Attack range is typically 10-15 studs in most games
-                                if distance < 20 and distance < closestDistance then
+                                if distance < 15 and distance < closestDistance then
                                     potentialAttacker = player
                                     closestDistance = distance
                                 end
@@ -259,9 +260,11 @@ local function trackDamageDealersForTarget(target)
                     end
                 end
                 
-                if potentialAttacker and not isAttacking then
-                    Protect.Shared.updateStatus(potentialAttacker.Name.. " attacked "..target.Name, Color3.fromRGB(220, 38, 38))
+                if potentialAttacker then
+                    Protect.Shared.updateStatus(potentialAttacker.Name.. " attacked "..protectTarget.Name, Color3.fromRGB(220, 38, 38))
                     attackAttacker(potentialAttacker)
+                else
+                    Protect.Shared.updateStatus("Unknown attacker", Color3.fromRGB(246, 189, 59))
                 end
             end
         end
@@ -270,36 +273,6 @@ local function trackDamageDealersForTarget(target)
     end)
     
     return healthCheckConnection
-end
-
--- Clean up all connections
-local function cleanupProtectConnections()
-    isAttacking = false
-    currentAttacker = nil
-    
-    -- Clean up protect connections
-    for _, conn in pairs(protectConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    protectConnections = {}
-    
-    -- Clean up damage connections
-    for _, conn in pairs(damageConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    damageConnections = {}
-    
-    -- Clean up cleanup connections
-    for _, conn in pairs(cleanupConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    cleanupConnections = {}
 end
 
 function Protect.init(Shared)
@@ -313,54 +286,44 @@ function Protect.start(targetText)
         task.wait(0.5) -- Small delay to ensure cleanup
     end
     
-    -- Parse multiple player names
-    local newTargets = parsePlayerNames(targetText)
-    if #newTargets == 0 then
-        Protect.Shared.updateStatus("No valid players found", Color3.fromRGB(246, 59, 59))
+    local newTarget = Protect.Shared.findPlayerSmart(targetText)
+    if not newTarget then
+        Protect.Shared.updateStatus("Player not found", Color3.fromRGB(246, 59, 59))
         return
     end
     
-    -- Limit to 5 players
-    if #newTargets > 5 then
-        Protect.Shared.updateStatus("Maximum 5 players, using first 5", Color3.fromRGB(246, 189, 59))
-        while #newTargets > 5 do
-            table.remove(newTargets)
-        end
-    end
-    
     Protect.Shared.protecting = true
-    protectTargets = newTargets
+    protectTarget = newTarget
     currentAttacker = nil
     isAttacking = false
     lastDamageTime = 0
     originalPosition = Protect.Shared.savePosition()
     
-    -- Create status message with all protected players
-    local targetNames = ""
-    for i, target in ipairs(protectTargets) do
-        targetNames = targetNames .. target.Name
-        if i < #protectTargets then
-            targetNames = targetNames .. ", "
+    Protect.Shared.updateStatus("Protecting "..protectTarget.Name.. "...", Color3.fromRGB(59, 189, 246))
+    
+    -- Teleport to initial position 50 studs behind target
+    local tChar = protectTarget.Character
+    if tChar then
+        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            local targetPosition = tHRP.Position
+            local targetLookVector = tHRP.CFrame.LookVector
+            
+            -- Calculate position 50 studs behind target
+            local behindTargetPosition = targetPosition + (targetLookVector * -50) + Vector3.new(0, Protect.Shared.HEIGHT, 0)
+            
+            -- Teleport to position
+            teleportToPosition(behindTargetPosition, targetPosition)
         end
     end
     
-    Protect.Shared.updateStatus("Protecting "..targetNames.. "...", Color3.fromRGB(59, 189, 246))
+    task.wait(0.3) -- Small delay
     
-    -- Start wielding behind protected players (50 studs away)
-    protectConnections[1] = wieldBehindTargets(protectTargets, -50) -- 50 studs back
+    -- Start wielding behind protected player (50 studs away)
+    protectConnection = wieldBehindTarget(protectTarget, -50) -- Negative means behind, 50 studs
     
-    -- Start tracking damage for each protected player
-    for i, target in ipairs(protectTargets) do
-        damageConnections[i] = trackDamageDealersForTarget(target)
-    end
-    
-    -- Simple cleanup connection
-    cleanupConnections[1] = Protect.Shared.RunService.Heartbeat:Connect(function()
-        if not Protect.Shared.protecting then
-            cleanupProtectConnections()
-            return
-        end
-    end)
+    -- Start tracking damage
+    damageConnection = trackDamageDealers()
 end
 
 function Protect.stop()
@@ -369,8 +332,8 @@ function Protect.stop()
     -- Clean up all connections
     cleanupProtectConnections()
     
-    -- Clear targets
-    protectTargets = {}
+    -- Clear target
+    protectTarget = nil
     
     -- Return to original position
     if originalPosition then
@@ -386,7 +349,7 @@ function Protect.onCharacterAdded()
     -- Reset protect state when character respawns
     Protect.Shared.protecting = false
     cleanupProtectConnections()
-    protectTargets = {}
+    protectTarget = nil
     originalPosition = nil
     lastDamageTime = 0
 end
