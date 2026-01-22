@@ -338,19 +338,19 @@ function GUI.create()
     leashCorner.CornerRadius = UDim.new(0, 6)
     leashCorner.Parent = leashBtn
 
-    -- Jail Player Button
-    jailBtn = Instance.new("TextButton")
-    jailBtn.Size = UDim2.new(1, 0, 0, 35)
-    jailBtn.Position = UDim2.fromOffset(0, 135)
-    jailBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
-    jailBtn.Text = "🚔 JAIL PLAYER"
-    jailBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    jailBtn.Font = Enum.Font.GothamSemibold
-    jailBtn.TextSize = 14
-    jailBtn.Parent = funTab
-    local jailCorner = Instance.new("UICorner")
-    jailCorner.CornerRadius = UDim.new(0, 6)
-    jailCorner.Parent = jailBtn
+    -- Isolate Player Button (NEW)
+isolateBtn = Instance.new("TextButton")
+isolateBtn.Size = UDim2.new(1, 0, 0, 35)
+isolateBtn.Position = UDim2.fromOffset(0, 135)
+isolateBtn.BackgroundColor3 = Color3.fromRGB(168, 85, 247)  -- Purple color
+isolateBtn.Text = "🔒 ISOLATE PLAYER"
+isolateBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+isolateBtn.Font = Enum.Font.GothamSemibold
+isolateBtn.TextSize = 14
+isolateBtn.Parent = funTab
+local isolateCorner = Instance.new("UICorner")
+isolateCorner.CornerRadius = UDim.new(0, 6)
+isolateCorner.Parent = isolateBtn
 
     -- FARM TAB
     local farmTab = Instance.new("Frame")
@@ -505,16 +505,17 @@ function GUI.create()
         end
     end)
 
-    jailBtn.MouseButton1Click:Connect(function()
-        local currentInput = getCurrentInputBox()
-        if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.jail then
-            Shared.Commands.jail.execute(currentInput.Text)
-        else
-            updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
-            task.wait(1.5)
-            updateStatus("Idle", Color3.fromRGB(59, 246, 105))
-        end
-    end)
+    -- Isolate button connection:
+isolateBtn.MouseButton1Click:Connect(function()
+    local currentInput = getCurrentInputBox()
+    if currentInput and currentInput.Text ~= "" and Shared and Shared.Commands and Shared.Commands.isolate then
+        Shared.Commands.isolate.execute(currentInput.Text)
+    else
+        updateStatus("Enter a player name", Color3.fromRGB(246, 59, 59))
+        task.wait(1.5)
+        updateStatus("Idle", Color3.fromRGB(59, 246, 105))
+    end
+end)
 
     protectBtn.MouseButton1Click:Connect(function()
         local currentInput = getCurrentInputBox()
