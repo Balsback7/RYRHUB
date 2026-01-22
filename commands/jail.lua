@@ -159,6 +159,43 @@ local function getPositionOutsideCage(cage)
     return CFrame.new(outsidePosition.X, outsidePosition.Y + 2, outsidePosition.Z)
 end
 
+-- Function to wield behind target (like bring command)
+local function wieldBehindTarget(target, duration)
+    local wieldConnection = nil
+    local startTime = tick()
+    
+    Jail.Shared.updateStatus("Wielding behind target...", Color3.fromRGB(246, 189, 59))
+    
+    wieldConnection = Jail.Shared.RunService.Heartbeat:Connect(function()
+        local tChar = target.Character
+        if not tChar then
+            if wieldConnection then wieldConnection:Disconnect() end
+            return
+        end
+        
+        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+        if not tHRP or not tHRP.Parent or not Jail.Shared.hrp or not Jail.Shared.hrp.Parent then
+            if wieldConnection then wieldConnection:Disconnect() end
+            return
+        end
+        
+        -- Stay behind target (height 3, back offset -3) - EXACTLY like bring command
+        Jail.Shared.hrp.CFrame = CFrame.new(
+            tHRP.Position + Vector3.new(0, Jail.Shared.HEIGHT, 0) + tHRP.CFrame.LookVector * Jail.Shared.BACK_OFFSET, 
+            tHRP.Position
+        )
+        Jail.Shared.hrp.AssemblyLinearVelocity = Vector3.zero
+        Jail.Shared.hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        -- Stop after duration
+        if tick() - startTime >= duration then
+            if wieldConnection then wieldConnection:Disconnect() end
+        end
+    end)
+    
+    return wieldConnection
+end
+
 function Jail.execute(targetText)
     task.spawn(function()
         local originalPosition = Jail.Shared.savePosition()
@@ -181,8 +218,8 @@ function Jail.execute(targetText)
             return
         end
         
-        -- PHASE 2: Teleport to target
-        Jail.Shared.updateStatus("Phase 2: Teleporting to target...", Color3.fromRGB(246, 189, 59))
+        -- PHASE 2: Wield behind target and attack until ragdoll
+        Jail.Shared.updateStatus("Phase 2: Attacking target...", Color3.fromRGB(246, 189, 59))
         
         local tChar = target.Character
         if not tChar then
@@ -198,18 +235,15 @@ function Jail.execute(targetText)
             return
         end
         
-        -- Teleport BEHIND target for better charge accuracy
-        local behindPosition = tHRP.Position + tHRP.CFrame.LookVector * -2 + Vector3.new(0, 2, 0)
-        Jail.Shared.hrp.CFrame = CFrame.new(behindPosition, tHRP.Position)
+        -- Start wielding behind target (like bring command)
+        local wieldConn = wieldBehindTarget(target, 5) -- Wield for 5 seconds while attacking
         
-        task.wait(0.3)
-        
-        -- PHASE 3: Attack target until ragdoll
-        Jail.Shared.updateStatus("Phase 3: Attacking target...", Color3.fromRGB(246, 189, 59))
-        
+        -- Attack with all remotes while wielding
         local ragdolled = false
         local attempts = 0
-        local maxAttempts = 15
+        local maxAttempts = 20
+        
+        Jail.Shared.updateStatus("Using attack remotes...", Color3.fromRGB(246, 189, 59))
         
         while not ragdolled and attempts < maxAttempts do
             -- Check if already ragdolled
@@ -223,33 +257,49 @@ function Jail.execute(targetText)
             
             attempts += 1
             
-            -- Reposition behind target
-            if tHRP and tHRP.Parent then
-                behindPosition = tHRP.Position + tHRP.CFrame.LookVector * -2 + Vector3.new(0, 2, 0)
-                Jail.Shared.hrp.CFrame = CFrame.new(behindPosition, tHRP.Position)
+            -- Update status every few attempts
+            if attempts % 5 == 0 then
+                Jail.Shared.updateStatus("Attacking... ("..attempts.."/"..maxAttempts..")", Color3.fromRGB(246, 189, 59))
             end
             
-            Jail.Shared.updateStatus("Attacking... ("..attempts.."/"..maxAttempts..")", Color3.fromRGB(246, 189, 59))
-            task.wait(0.3)
+            task.wait(0.2)
         end
         
-        if not ragdolled then
-            -- Try charge as last resort
-            Jail.Shared.updateStatus("Trying charge attack...", Color3.fromRGB(246, 189, 59))
-            pcall(function()
-                Jail.Shared.ReplicatedStorage:WaitForChild("JALADADEPELOEVENT"):FireServer()
-            end)
-            
-            -- Wait a bit for charge effect
-            task.wait(1)
+        -- Stop wielding
+        if wieldConn then
+            wieldConn:Disconnect()
         end
         
-        -- PHASE 4: Wait for ragdoll
-        Jail.Shared.updateStatus("Phase 4: Waiting for ragdoll...", Color3.fromRGB(246, 189, 59))
+        -- PHASE 3: Wait for ragdoll confirmation
+        Jail.Shared.updateStatus("Phase 3: Waiting for ragdoll...", Color3.fromRGB(246, 189, 59))
         
         if not waitForRagdoll(target) then
             Jail.Shared.updateStatus("Proceeding anyway...", Color3.fromRGB(246, 189, 59))
         end
+        
+        -- PHASE 4: Use JALADADEPELOEVENT while wielding behind target
+        Jail.Shared.updateStatus("Phase 4: Using jaladaDePeloCharge...", Color3.fromRGB(246, 189, 59))
+        
+        -- Wield behind target again for the charge
+        local chargeWieldConn = wieldBehindTarget(target, 2)
+        
+        -- Use the charge
+        pcall(function()
+            Jail.Shared.ReplicatedStorage:WaitForChild("JALADADEPELOEVENT"):FireServer()
+            Jail.Shared.updateStatus("Charge fired!", Color3.fromRGB(59, 189, 246))
+        end)
+        
+        -- Wait for charge effect
+        task.wait(1)
+        
+        -- Stop wielding
+        if chargeWieldConn then
+            chargeWieldConn:Disconnect()
+        end
+        
+        -- Wait a bit more for charge animation
+        Jail.Shared.updateStatus("Waiting for charge to complete...", Color3.fromRGB(246, 189, 59))
+        task.wait(2)
         
         -- PHASE 5: Move to position outside cage
         Jail.Shared.updateStatus("Phase 5: Moving outside cage...", Color3.fromRGB(246, 189, 59))
@@ -293,11 +343,8 @@ function Jail.execute(targetText)
             
             -- Try to click on the cage
             if cage:IsA("BasePart") then
-                -- Send a fake mouse click to the cage
-                local mouse = game.Players.LocalPlayer:GetMouse()
-                mouse.Target = cage
-                
-                -- Wait a bit
+                -- Move close to the cage
+                Jail.Shared.hrp.CFrame = CFrame.new(cage.Position + Vector3.new(0, 2, 3))
                 task.wait(0.5)
                 
                 -- Try to use the jaladaDePeloCharge on the cage
