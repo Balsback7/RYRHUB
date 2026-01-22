@@ -4,7 +4,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Load modules
-local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Balsback7/RYRHUB/refs/heads/main/gui.lua"))()
+local GUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Balsback7/RYRHub/main/gui.lua"))()
 local Commands = {}
 
 -- Load command modules
@@ -13,8 +13,8 @@ local commandFiles = {
     "bring", 
     "annoy",
     "leash",
-    "jail",
-    "protect"  -- New command
+    "isolate",  -- Changed from jail to isolate
+    "protect"
 }
 
 for _, cmdName in ipairs(commandFiles) do
@@ -77,7 +77,7 @@ local Shared = {
     Commands = Commands
 }
 
--- Utility functions
+-- Utility functions (same as before, no changes needed)
 Shared.getCharge = function()
     local v = Shared.player:FindFirstChild("jaladaDePeloCharge")
     return v and v.Value or 0
