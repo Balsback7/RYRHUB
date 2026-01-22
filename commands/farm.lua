@@ -3,28 +3,12 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local LocalPlayer = Players.LocalPlayer
-
-local module = {}
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
 
 local farming = false
-local currentNPC
 local botList = {}
-local followConnection
-local attackConnection
-
-local function getCharge()
-    local v = LocalPlayer:FindFirstChild("jaladaDePeloCharge")
-    return v and v.Value or 0
-end
-
-local function useAllAttackRemotes()
-    pcall(function() ReplicatedStorage.Modules.Net["RE/chakramHit"]:FireServer(1) end)
-    pcall(function() ReplicatedStorage.PUNCHEVENT:FireServer(1) end)
-    pcall(function()
-        ReplicatedStorage.Modules.Net["RE/CrowbarHit"]:FireServer(1)
-    end)
-end
 
 local function refreshBots()
     botList = {}
@@ -36,51 +20,35 @@ local function refreshBots()
     end
 end
 
-local function chooseRandomNPC()
+local function chooseRandomBot()
     refreshBots()
     if #botList == 0 then return nil end
-    currentNPC = botList[math.random(1,#botList)]
-    return currentNPC
+    return botList[math.random(1,#botList)]
 end
 
-function module.start(updateStatus)
+local function attackBot()
+    pcall(function() ReplicatedStorage.Modules.Net["RE/chakramHit"]:FireServer(1) end)
+    pcall(function() ReplicatedStorage.PUNCHEVENT:FireServer(1) end)
+    pcall(function() ReplicatedStorage.Modules.Net["RE/CrowbarHit"]:FireServer(1) end)
+end
+
+local function Start(target)
     if farming then return end
     farming = true
-
-    local originalPosition = LocalPlayer.Character.HumanoidRootPart.CFrame
-    chooseRandomNPC()
-    local lastBotName = ""
-
-    followConnection = RunService.Heartbeat:Connect(function()
-        if not farming then return end
-        if currentNPC and currentNPC:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character.HumanoidRootPart.CFrame = 
-                CFrame.new(currentNPC.HumanoidRootPart.Position + Vector3.new(0,3,-3), currentNPC.HumanoidRootPart.Position)
-        else
-            chooseRandomNPC()
-        end
-        if currentNPC and currentNPC.Name ~= lastBotName then
-            lastBotName = currentNPC.Name
-            updateStatus("Farming: "..lastBotName)
-        end
-    end)
-
-    attackConnection = RunService.Heartbeat:Connect(function()
-        if not farming then return end
-        local charge = getCharge()
-        useAllAttackRemotes()
-        updateStatus("Charge: "..charge.."%")
-        if charge >= 100 then
-            module.stop(updateStatus)
+    local currentBot = chooseRandomBot()
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not farming then connection:Disconnect() return end
+        if currentBot and currentBot:FindFirstChild("HumanoidRootPart") then
+            local botHRP = currentBot.HumanoidRootPart
+            hrp.CFrame = CFrame.new(botHRP.Position + Vector3.new(0,3,-3), botHRP.Position)
+            attackBot()
         end
     end)
 end
 
-function module.stop(updateStatus)
+local function Stop()
     farming = false
-    if followConnection then followConnection:Disconnect() followConnection = nil end
-    if attackConnection then attackConnection:Disconnect() attackConnection = nil end
-    updateStatus("Farming stopped")
 end
 
-return module
+return {Start = Start, Stop = Stop}
